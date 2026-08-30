@@ -1,4 +1,8 @@
+using CinemaTicketsBack.DTOs;
+using CinemaTicketsBack.Enums;
+using CinemaTicketsBack.Infrastructure.Database;
 using CinemaTicketsBack.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace CinemaTicketsBack.Features.Movies;
 
@@ -6,78 +10,209 @@ public static class MovieEndpoints
 {
     public static void MapMovieEndpoints(this IEndpointRouteBuilder app)
     {
-        var movies = new List<Movie>
+        var group = app.MapGroup("/movies").WithTags("Movies");
+
+        group.MapGet("/active", async (string? view, AppDbContext db) =>
         {
-            new()
+            var isSummary = string.Equals(view, "summary", StringComparison.OrdinalIgnoreCase);
+            var query = db.Movies.Where(m => m.IsActive);
+
+            if (isSummary)
             {
-                Id = Guid.NewGuid(),
-                Title = "Inception",
-                Genre = "Sci-Fi",
-                DurationMinutes = 148,
-                Description = "A thief who enters dreams.",
-                ReleaseDate = new DateTime(2010, 7, 16)
-            },
-            new()
-            {
-                Id = Guid.NewGuid(),
-                Title = "The Matrix",
-                Genre = "Action",
-                DurationMinutes = 136,
-                Description = "A hacker discovers reality is a simulation.",
-                ReleaseDate = new DateTime(1999, 3, 31)
+                var summaries = await query
+                    .Select(m => new MovieSummaryDto(
+                        m.Id, m.Title, m.Genre, m.Duration, m.ReleaseDate, m.Language))
+                    .ToListAsync();
+                return Results.Ok(summaries);
             }
-        };
 
-        var group = app.MapGroup("/api/movies")
-            .WithTags("Movies");
-
-        group.MapGet("", () => Results.Ok(movies));
-
-        group.MapGet("{id:guid}", (Guid id) =>
-        {
-            var movie = movies.FirstOrDefault(x => x.Id == id);
-            return movie is null ? Results.NotFound(new { message = "Movie not found." }) : Results.Ok(movie);
+            var detailed = await query
+                .Select(m => new MovieDto(
+                    m.Id, m.Title, m.Genre, m.Duration, m.ReleaseDate,
+                    m.Language, m.Description, m.Actors, m.TrailerUrl,
+                    m.IsActive, m.CreatedAt, m.UpdatedAt))
+                .ToListAsync();
+            return Results.Ok(detailed);
         });
 
-        group.MapPost("", (Movie movie) =>
+        group.MapGet("", async (MovieGenre? genre, bool? activeOnly, string? title, AppDbContext db) =>
         {
-            movie.Id = Guid.NewGuid();
-            movies.Add(movie);
-            return Results.Created($"/api/movies/{movie.Id}", movie);
+            var query = db.Movies.AsQueryable();
+
+            if (genre.HasValue)
+            {
+                query = query.Where(m => m.Genre == genre.Value);
+            }
+            if (activeOnly.HasValue && activeOnly.Value)
+            {
+                query = query.Where(m => m.IsActive);
+            }
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                query = query.Where(m => m.Title.Contains(title.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            var movies = await query
+                .Select(m => new MovieDto(
+                    m.Id, m.Title, m.Genre, m.Duration, m.ReleaseDate,
+                    m.Language, m.Description, m.Actors, m.TrailerUrl,
+                    m.IsActive, m.CreatedAt, m.UpdatedAt))
+                .ToListAsync();
+
+            return Results.Ok(movies);
         });
 
-        group.MapPut("{id:guid}", (Guid id, Movie updatedMovie) =>
+        group.MapGet("/{id:guid}", async (Guid id, AppDbContext db) =>
         {
-            var existingMovie = movies.FirstOrDefault(x => x.Id == id);
-            if (existingMovie is null)
+            var movie = await db.Movies.FindAsync(id);
+            if (movie is null)
             {
                 return Results.NotFound(new { message = "Movie not found." });
             }
 
-            var index = movies.IndexOf(existingMovie);
-            movies[index] = new Movie
+            var dto = new MovieDto(
+                movie.Id, movie.Title, movie.Genre, movie.Duration, movie.ReleaseDate,
+                movie.Language, movie.Description, movie.Actors, movie.TrailerUrl,
+                movie.IsActive, movie.CreatedAt, movie.UpdatedAt);
+            return Results.Ok(dto);
+        });
+
+        group.MapPost("", async (CreateMovieRequest request, AppDbContext db) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Title))
             {
-                Id = existingMovie.Id,
-                Title = updatedMovie.Title,
-                Genre = updatedMovie.Genre,
-                DurationMinutes = updatedMovie.DurationMinutes,
-                Description = updatedMovie.Description,
-                ReleaseDate = updatedMovie.ReleaseDate
+                return Results.BadRequest(new { message = "Movie title is required." });
+            }
+            if (request.Duration <= 0)
+            {
+                return Results.BadRequest(new { message = "Duration must be greater than zero." });
+            }
+            if (request.ReleaseDate == default)
+            {
+                return Results.BadRequest(new { message = "Valid release date is required." });
+            }
+            if (string.IsNullOrWhiteSpace(request.Language))
+            {
+                return Results.BadRequest(new { message = "Language is required." });
+            }
+            if (!string.IsNullOrWhiteSpace(request.TrailerUrl) &&
+                !Uri.TryCreate(request.TrailerUrl, UriKind.Absolute, out _))
+            {
+                return Results.BadRequest(new { message = "Trailer URL must be a valid absolute URL when provided." });
+            }
+
+            var movie = new Movie
+            {
+                Id = Guid.NewGuid(),
+                Title = request.Title.Trim(),
+                Genre = request.Genre,
+                Duration = request.Duration,
+                ReleaseDate = request.ReleaseDate,
+                Language = request.Language.Trim(),
+                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                Actors = string.IsNullOrWhiteSpace(request.Actors) ? null : request.Actors.Trim(),
+                TrailerUrl = string.IsNullOrWhiteSpace(request.TrailerUrl) ? null : request.TrailerUrl.Trim(),
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
             };
 
-            return Results.Ok(movies[index]);
-        });
+            db.Movies.Add(movie);
+            await db.SaveChangesAsync();
 
-        group.MapDelete("{id:guid}", (Guid id) =>
+            var dto = new MovieDto(
+                movie.Id, movie.Title, movie.Genre, movie.Duration, movie.ReleaseDate,
+                movie.Language, movie.Description, movie.Actors, movie.TrailerUrl,
+                movie.IsActive, movie.CreatedAt, movie.UpdatedAt);
+            return Results.Created($"/api/v1/movies/{movie.Id}", dto);
+        }).RequireAuthorization("AdminOnly");
+
+        group.MapPut("/{id:guid}", async (Guid id, UpdateMovieRequest request, AppDbContext db) =>
         {
-            var existingMovie = movies.FirstOrDefault(x => x.Id == id);
-            if (existingMovie is null)
+            if (string.IsNullOrWhiteSpace(request.Title))
+            {
+                return Results.BadRequest(new { message = "Movie title is required." });
+            }
+            if (request.Duration <= 0)
+            {
+                return Results.BadRequest(new { message = "Duration must be greater than zero." });
+            }
+            if (request.ReleaseDate == default)
+            {
+                return Results.BadRequest(new { message = "Valid release date is required." });
+            }
+            if (string.IsNullOrWhiteSpace(request.Language))
+            {
+                return Results.BadRequest(new { message = "Language is required." });
+            }
+            if (!string.IsNullOrWhiteSpace(request.TrailerUrl) &&
+                !Uri.TryCreate(request.TrailerUrl, UriKind.Absolute, out _))
+            {
+                return Results.BadRequest(new { message = "Trailer URL must be a valid absolute URL when provided." });
+            }
+
+            var movie = await db.Movies.FindAsync(id);
+            if (movie is null)
             {
                 return Results.NotFound(new { message = "Movie not found." });
             }
 
-            movies.Remove(existingMovie);
-            return Results.NoContent();
-        });
+            movie.Title = request.Title.Trim();
+            movie.Genre = request.Genre;
+            movie.Duration = request.Duration;
+            movie.ReleaseDate = request.ReleaseDate;
+            movie.Language = request.Language.Trim();
+            movie.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+            movie.Actors = string.IsNullOrWhiteSpace(request.Actors) ? null : request.Actors.Trim();
+            movie.TrailerUrl = string.IsNullOrWhiteSpace(request.TrailerUrl) ? null : request.TrailerUrl.Trim();
+            movie.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+
+            var dto = new MovieDto(
+                movie.Id, movie.Title, movie.Genre, movie.Duration, movie.ReleaseDate,
+                movie.Language, movie.Description, movie.Actors, movie.TrailerUrl,
+                movie.IsActive, movie.CreatedAt, movie.UpdatedAt);
+            return Results.Ok(dto);
+        }).RequireAuthorization("AdminOnly");
+
+        group.MapPatch("/{id:guid}/deactivate", async (Guid id, AppDbContext db) =>
+        {
+            var movie = await db.Movies.FindAsync(id);
+            if (movie is null)
+            {
+                return Results.NotFound(new { message = "Movie not found." });
+            }
+
+            movie.IsActive = false;
+            movie.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+
+            var dto = new MovieDto(
+                movie.Id, movie.Title, movie.Genre, movie.Duration, movie.ReleaseDate,
+                movie.Language, movie.Description, movie.Actors, movie.TrailerUrl,
+                movie.IsActive, movie.CreatedAt, movie.UpdatedAt);
+            return Results.Ok(dto);
+        }).RequireAuthorization("AdminOnly");
+
+        group.MapPatch("/{id:guid}/activate", async (Guid id, AppDbContext db) =>
+        {
+            var movie = await db.Movies.FindAsync(id);
+            if (movie is null)
+            {
+                return Results.NotFound(new { message = "Movie not found." });
+            }
+
+            movie.IsActive = true;
+            movie.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+
+            var dto = new MovieDto(
+                movie.Id, movie.Title, movie.Genre, movie.Duration, movie.ReleaseDate,
+                movie.Language, movie.Description, movie.Actors, movie.TrailerUrl,
+                movie.IsActive, movie.CreatedAt, movie.UpdatedAt);
+            return Results.Ok(dto);
+        }).RequireAuthorization("AdminOnly");
     }
 }

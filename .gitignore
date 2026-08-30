@@ -1,0 +1,23 @@
+# Managed by squad-kit — do not edit this block
+.squad/secrets.yaml
+.squad/stories/**/attachments/
+.squad/.trash/
+.squad/.last-run.json
+.squad/.last-copy-prompt.md
+.squad/runs/
+.squad/sessions/
+# ignore build output
+bin/
+obj/
+
+# ignore database
+*.db
+# ignore backup files
+*.bak
+
+# ignore solution files
+*.sln
+# ignore test project
+cinema-tickets-back.Tests
+
+# End squad-kit block

@@ -1,11 +1,1 @@
-{
-  "Version": 1,
-  "Hash": "Z4TSeSHhzuXH9FU7dZ5uKi5g6zcPBRqnBgK6ngDuVew=",
-  "Source": "Backend App",
-  "BasePath": "_content/Backend App",
-  "Mode": "Default",
-  "ManifestType": "Build",
-  "ReferencedProjectsConfiguration": [],
-  "DiscoveryPatterns": [],
-  "Assets": []
-}
+{"Version":1,"Hash":"CoOZs3TB5IRf0NXnizDwF2Jp0JbdNHX5rAnDLwxf8B4=","Source":"cinema-tickets-back","BasePath":"/","Mode":"Root","ManifestType":"Build","ReferencedProjectsConfiguration":[],"DiscoveryPatterns":[],"Assets":[],"Endpoints":[]}
