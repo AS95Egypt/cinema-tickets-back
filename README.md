@@ -6,7 +6,7 @@ The API provides authentication, cinema hall management, movie management, scree
 
 The project is designed as the backend for the Angular frontend application:
 
-**Frontend:** [Cinema Reservation Web](https://github.com/YOUR_USERNAME/cinema-reservation-web)
+**Frontend:** [Cinema Reservation Web](https://github.com/AS95Egypt/cinema-tickets-front)
 
 ---
 
