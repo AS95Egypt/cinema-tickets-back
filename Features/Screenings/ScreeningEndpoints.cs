@@ -47,7 +47,7 @@ public static class ScreeningEndpoints
         group.MapPost("", async (Guid movieId, CreateScreeningRequest request, AppDbContext db) =>
         {
             // print request to console for debugging
-            Console.WriteLine($"Request: {request}");
+            // Console.WriteLine($"Request: {request}");
             var movie = await db.Movies.FindAsync(movieId);
             if (movie is null)
             {
@@ -126,6 +126,65 @@ public static class ScreeningEndpoints
 
             return Results.Created($"/api/v1/movies/{movieId}/screenings#{created.Id}", created);
         }).RequireAuthorization("AdminOnly");
+
+        seatsGroup.MapGet("/all", async (
+            AppDbContext db,
+            Guid? movieId,
+            Guid? hallId,
+            int page = 1,
+            int pageSize = 10
+            ) =>
+        {
+            if (page <= 0)
+            {
+                return Results.BadRequest(new { message = "Page must be greater than zero." });
+            }
+
+            if (pageSize <= 0 || pageSize > 100)
+            {
+                return Results.BadRequest(new { message = "PageSize must be between 1 and 100." });
+            }
+
+            var query = db.Screenings
+                .AsNoTracking()
+                .Include(s => s.Hall)
+                .Include(s => s.Movie)
+                .AsQueryable();
+
+            if (movieId.HasValue)
+            {
+                query = query.Where(s => s.MovieId == movieId.Value);
+            }
+
+            if (hallId.HasValue)
+            {
+                query = query.Where(s => s.HallId == hallId.Value);
+            }
+
+            var totalCount = await query.CountAsync();
+
+            var screenings = await query
+                .OrderByDescending(s => s.StartDateTime)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.StartDateTime,
+                    s.Price,
+                    Hall = new ScreeningHallInfoDto(s.Hall.Id, s.Hall.Title, s.Hall.Type),
+                    Movie = new ScreeningMovieInfoDto(s.Movie.Id, s.Movie.Title, s.Movie.Duration)
+                })
+                .ToListAsync();
+
+            return Results.Ok(new
+            {
+                totalCount,
+                page,
+                pageSize,
+                items = screenings
+            });
+        });
 
         seatsGroup.MapGet("/{screeningId:guid}/seats", async (
             Guid screeningId,

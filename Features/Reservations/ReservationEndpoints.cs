@@ -117,7 +117,30 @@ public static class ReservationEndpoints
                 return Results.Json(new { message = "This seat is already reserved for this screening." }, statusCode: 409);
             }
         }).RequireAuthorization();
+
+
+        group.MapPut("/{id:guid}/pay", async (
+            Guid id,
+            AppDbContext db
+            ) =>
+        {
+            var reservation = await db.Reservations.FindAsync(id);
+            if (reservation is null)
+            {
+                return Results.NotFound(new { message = "Reservation not found." });
+            }
+
+            reservation.Status = ReservationStatus.CONFIRMED;       
+            reservation.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+
+            return Results.Json(new { message = "Payment successful, Seat reserved." }, statusCode: 200);
+            
+        }).RequireAuthorization();
     }
+
+    
 
     internal static bool IsValidSeatNo(int seatNo, int hallCapacity)
     {

@@ -18,6 +18,8 @@ obj/
 # ignore solution files
 *.sln
 # ignore test project
-cinema-tickets-back.Tests
+# cinema-tickets-back.Tests
 
 # End squad-kit block
+
+obj/Debug/net8.0/apphost.exe

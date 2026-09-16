@@ -14,6 +14,12 @@ public record ScreeningHallInfoDto(
     HallType Type
 );
 
+public record ScreeningMovieInfoDto(
+    Guid Id,
+    string Title,
+    int Duration
+);
+
 public record ScreeningDto(
     Guid Id,
     DateTime StartDateTime,

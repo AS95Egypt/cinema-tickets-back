@@ -185,6 +185,25 @@ Run automated tests with:
 dotnet test
 ```
 
+### Endpoint integration tests
+
+Endpoint tests use `WebApplicationFactory<Program>` and SQL Server Testcontainers. They start an isolated SQL Server database for the test class, so they do not use the development database configured in `appsettings.json`.
+
+Prerequisites:
+
+* Docker Desktop must be installed and running.
+
+Useful commands from the repository root:
+
+```bash
+dotnet restore
+dotnet build cinema-tickets-back.Tests/cinema-tickets-back.Tests.csproj
+dotnet test cinema-tickets-back.Tests/cinema-tickets-back.Tests.csproj
+dotnet test cinema-tickets-back.Tests/cinema-tickets-back.Tests.csproj --filter FullyQualifiedName~AuthEndpointsTests
+```
+
+The first Testcontainers run may download the SQL Server image. EF Core InMemory remains available for small isolated unit tests, but SQL Server-backed integration tests should be used for transactions, filtered indexes, and endpoint workflows.
+
 ---
 
 ## 📌 Project Status
